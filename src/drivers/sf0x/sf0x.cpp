@@ -110,6 +110,7 @@ protected:
 	virtual int			probe();
 
 private:
+	char				_port[24];
 	float				_min_distance;
 	float				_max_distance;
 	work_s				_work;
@@ -124,14 +125,15 @@ private:
 
 	orb_advert_t			_range_finder_topic;
 
-	unsigned			_consecutive_fail_count;
+	unsigned			_consecutive_fail_count;	///< Number of consecutive read fails
+	bool				_initialized;			///< System initialized
 
 	perf_counter_t			_sample_perf;
 	perf_counter_t			_comms_errors;
 	perf_counter_t			_buffer_overflows;
 
 	/**
-	* Initialise the automatic measurement state machine and start it.
+	* Initialize the automatic measurement state machine and start it.
 	*
 	* @note This function is called at open and error time.  It might make sense
 	*       to make it more aggressive about resetting the bus in case of errors.
@@ -160,6 +162,7 @@ private:
 	void				cycle();
 	int				measure();
 	int				collect();
+
 	/**
 	* Static trampoline from the workq context; because we don't have a
 	* generic workq wrapper yet.
@@ -189,49 +192,16 @@ SF0X::SF0X(const char *port) :
 	_last_read(0),
 	_range_finder_topic(-1),
 	_consecutive_fail_count(0),
+	_initialized(false),
 	_sample_perf(perf_alloc(PC_ELAPSED, "sf0x_read")),
 	_comms_errors(perf_alloc(PC_COUNT, "sf0x_comms_errors")),
 	_buffer_overflows(perf_alloc(PC_COUNT, "sf0x_buffer_overflows"))
 {
-	/* open fd */
-	_fd = ::open(port, O_RDWR | O_NOCTTY | O_NONBLOCK);
-
-	if (_fd < 0) {
-		warnx("FAIL: laser fd");
-	}
-
-	/* tell it to stop auto-triggering */
-	char stop_auto = ' ';
-	(void)::write(_fd, &stop_auto, 1);
-	usleep(100);
-	(void)::write(_fd, &stop_auto, 1);
-
-	struct termios uart_config;
-
-	int termios_state;
-
-	/* fill the struct for the new configuration */
-	tcgetattr(_fd, &uart_config);
-
-	/* clear ONLCR flag (which appends a CR for every LF) */
-	uart_config.c_oflag &= ~ONLCR;
-	/* no parity, one stop bit */
-	uart_config.c_cflag &= ~(CSTOPB | PARENB);
-
-	unsigned speed = B9600;
-
-	/* set baud rate */
-	if ((termios_state = cfsetispeed(&uart_config, speed)) < 0) {
-		warnx("ERR CFG: %d ISPD", termios_state);
-	}
-
-	if ((termios_state = cfsetospeed(&uart_config, speed)) < 0) {
-		warnx("ERR CFG: %d OSPD\n", termios_state);
-	}
-
-	if ((termios_state = tcsetattr(_fd, TCSANOW, &uart_config)) < 0) {
-		warnx("ERR baud %d ATTR", termios_state);
-	}
+	// force string termination for empty input, copy string if present
+	_port[0] = '\0';
+	strncpy(_port, port, sizeof(_port));
+	// force string termination at end
+	_port[sizeof(_port) - 1] = '\0';
 
 	// disable debug() calls
 	_debug_enabled = false;
@@ -270,18 +240,6 @@ SF0X::init()
 		goto out;
 	}
 
-	/* get a publish handle on the range finder topic */
-	struct range_finder_report zero_report;
-	memset(&zero_report, 0, sizeof(zero_report));
-	_range_finder_topic = orb_advertise(ORB_ID(sensor_range_finder), &zero_report);
-
-	if (_range_finder_topic < 0) {
-		warnx("advert err");
-	}
-
-	/* close the fd */
-	::close(_fd);
-	_fd = -1;
 out:
 	return OK;
 }
@@ -639,7 +597,15 @@ SF0X::collect()
 	report.valid = valid && (si_units > get_minimum_distance() && si_units < get_maximum_distance() ? 1 : 0);
 
 	/* publish it */
-	orb_publish(ORB_ID(sensor_range_finder), _range_finder_topic, &report);
+	if (_range_finder_topic > 0) {
+		orb_publish(ORB_ID(sensor_range_finder), _range_finder_topic, &report);
+	} else {
+		_range_finder_topic = orb_advertise(ORB_ID(sensor_range_finder), &report);
+
+		if (_range_finder_topic < 0) {
+			warnx("advert err");
+		}
+	}
 
 	if (_reports->force(&report)) {
 		perf_count(_buffer_overflows);
@@ -699,9 +665,49 @@ void
 SF0X::cycle()
 {
 	/* fds initialized? */
-	if (_fd < 0) {
+	if (!_initialized) {
 		/* open fd */
-		_fd = ::open(SF0X_DEFAULT_PORT, O_RDWR | O_NOCTTY | O_NONBLOCK);
+		_fd = ::open(_port, O_RDWR | O_NOCTTY | O_NONBLOCK);
+
+		/* open fd */
+		if (_fd < 0) {
+			warnx("FAIL: laser fd");
+		}
+
+		/* tell it to stop auto-triggering */
+		char stop_auto = ' ';
+		(void)::write(_fd, &stop_auto, 1);
+		usleep(100);
+		(void)::write(_fd, &stop_auto, 1);
+
+		struct termios uart_config;
+
+		int termios_state;
+
+		/* fill the struct for the new configuration */
+		tcgetattr(_fd, &uart_config);
+
+		/* clear ONLCR flag (which appends a CR for every LF) */
+		uart_config.c_oflag &= ~ONLCR;
+		/* no parity, one stop bit */
+		uart_config.c_cflag &= ~(CSTOPB | PARENB);
+
+		unsigned speed = B9600;
+
+		/* set baud rate */
+		if ((termios_state = cfsetispeed(&uart_config, speed)) < 0) {
+			warnx("ERR CFG: %d ISPD", termios_state);
+		}
+
+		if ((termios_state = cfsetospeed(&uart_config, speed)) < 0) {
+			warnx("ERR CFG: %d OSPD\n", termios_state);
+		}
+
+		if ((termios_state = tcsetattr(_fd, TCSANOW, &uart_config)) < 0) {
+			warnx("ERR baud %d ATTR", termios_state);
+		}
+
+		_initialized = true;
 	}
 
 	/* collection phase? */
