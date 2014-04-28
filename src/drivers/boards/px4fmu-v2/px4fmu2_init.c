@@ -221,14 +221,16 @@ __EXPORT int nsh_archinitialize(void)
 	stm32_configgpio(GPIO_ADC1_IN13);	/* FMU_AUX_ADC_1 */
 	stm32_configgpio(GPIO_ADC1_IN14);	/* FMU_AUX_ADC_2 */
 	stm32_configgpio(GPIO_ADC1_IN15);	/* PRESSURE_SENS */
+	message("[boot] ADC pins configured\r\n");
 
 	/* configure power supply control/sense pins */
 	stm32_configgpio(GPIO_VDD_5V_PERIPH_EN);
-	stm32_configgpio(GPIO_VDD_3V3_SENSORS_EN);
+//	stm32_configgpio(GPIO_VDD_3V3_SENSORS_EN);
 	stm32_configgpio(GPIO_VDD_BRICK_VALID);
 	stm32_configgpio(GPIO_VDD_SERVO_VALID);
 	stm32_configgpio(GPIO_VDD_5V_HIPOWER_OC);
 	stm32_configgpio(GPIO_VDD_5V_PERIPH_OC);
+	message("[boot] power c/s pins configured\r\n");
 
 	/* configure the high-resolution time/callout interface */
 	hrt_init();

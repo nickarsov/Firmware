@@ -60,6 +60,10 @@ __BEGIN_DECLS
  ****************************************************************************************************/
 /* Configuration ************************************************************************************/
 
+#define CONFIG_ARCH_BOARD_PX4FMU_X1
+#define CONFIG_MTD
+#define CONFIG_MTD_RAMTRON
+
 /* PX4IO connection configuration */
 #define PX4IO_SERIAL_DEVICE	"/dev/ttyS4"
 #define PX4IO_SERIAL_TX_GPIO	GPIO_USART6_TX

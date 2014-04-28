@@ -155,7 +155,7 @@ struct mtd_dev_s *ramtron_initialize(FAR struct spi_dev_s *dev);
 struct mtd_dev_s *mtd_partition(FAR struct mtd_dev_s *mtd,
                                     off_t firstblock, off_t nblocks);
 
-#ifdef CONFIG_MTD_RAMTRON
+#ifdef CONFIG_MTD_W25
 static void
 ramtron_attach(void)
 {
@@ -236,7 +236,7 @@ mtd_start(char *partition_names[], unsigned n_partitions)
 		errx(1, "mtd already mounted");
 
 	if (!attached) {
-		#ifdef CONFIG_ARCH_BOARD_PX4FMU_V1
+        #if defined(CONFIG_ARCH_BOARD_PX4FMU_V1) || defined(CONFIG_ARCH_BOARD_PX4FMU_1)
 		at24xxx_attach();
 		#else
 		ramtron_attach();
