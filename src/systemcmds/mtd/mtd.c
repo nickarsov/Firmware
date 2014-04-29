@@ -172,7 +172,8 @@ ramtron_attach(void)
 
 	/* start the RAMTRON driver, attempt 5 times */
 	for (int i = 0; i < 5; i++) {
-		mtd_dev = ramtron_initialize(spi);
+//		mtd_dev = ramtron_initialize(spi);
+		mtd_dev = w25_initialize(spi);
 
 		if (mtd_dev) {
 			/* abort on first valid result */
