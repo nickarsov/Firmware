@@ -218,7 +218,7 @@ int led_init()
 
 	if (rgbleds == -1) {
 #ifdef CONFIG_ARCH_BOARD_PX4FMU_V2
-		errx(1, "Unable to open " RGBLED_DEVICE_PATH);
+		warnx("Unable to open " RGBLED_DEVICE_PATH);
 #else
 		warnx("No RGB LED found");
 #endif
